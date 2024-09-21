@@ -82,11 +82,12 @@ def check_player_inactive(inactive_sec = 60 * 60):
 
         # 獲取構建的開始時間，並計算距離當前時間的差值
         build_start_time = build_info['timestamp'] / 1000  # Jenkins 返回的是毫秒
-        time_difference = time.time() - build_start_time
+        current_time = time.time()
+        time_difference = current_time - build_start_time
 
         # 如果構建的開始時間超過一小時，則結束
         if time_difference > inactive_sec:
-            print(f"已確認長時間無玩家在線!!! build_start_time = {build_start_time}")
+            print(f"已確認長時間無玩家在線!!! build_start_time = {build_start_time} & current_time = {current_time}")
             return True
         else:
             print(f"建構時間尚未超時 build_start_time = {build_start_time}")
