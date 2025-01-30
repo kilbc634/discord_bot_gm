@@ -47,6 +47,9 @@ async def stop_server_when_player_inactive():
 async def on_ready():
     print('Ready!')
 
+    # 設定遊玩中的狀態
+    await bot.change_presence(activity=discord.Game(name=GAME_SERVER_CODE))
+
     await asyncio.sleep(10)
     task = stop_server_when_player_inactive.start()
     task_mapping['stop_server_when_player_inactive'] = task
