@@ -4,6 +4,7 @@ import base64
 import time
 from datetime import datetime, timedelta
 import json
+import re
 
 # 設置Jnekins job，有可能會用到的job url都在這裡
 Jenkins_job = {
@@ -144,7 +145,7 @@ def check_player_inactive(inactive_sec = 60 * 60):
             # sample:
             # palworld-server | [2025-01-16 13:49:35] [LOG] Tsukumo0114 joined the server. (User id: steam_76561198131832310)
             # palworld-server | [2025-01-16 13:51:36] [LOG] Tsukumo0114 left the server. (User id: steam_76561198131832310)
-            pattern = re.compile(r"\[(.*?)\] \[LOG\] (.+?) (joined|left) the server\. \(User id: (steam_\d+)\)")
+            pattern = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[LOG\] (.+?) (joined|left) the server\. \(User id: (steam_\d+)\)")
 
             for match in pattern.finditer(status_file):
                 timestamp, username, action, steam_id = match.groups()
