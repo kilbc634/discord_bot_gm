@@ -110,7 +110,7 @@ def check_player_inactive(inactive_sec = 60 * 60):
     if GAME_SERVER_CODE == 'palworld-dedicated-server':
         # 執行status檢查job
         post_job_status()
-        time.sleep(5)
+        time.sleep(10)
 
         build_number = get_last_build_number()
         print(f"最新的建構是 build_number = {build_number}")
