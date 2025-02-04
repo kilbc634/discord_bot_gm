@@ -18,7 +18,7 @@ channel_id = 643265881996132362
 async def game_server_switch(ctx: discord.ApplicationContext, switch: str):
     """用於 啟動/停止 當前正在遊玩的伺服器"""
     if switch == 'up':
-        await ctx.respond("啟動伺服器中，請稍後....")
+        await ctx.respond("啟動伺服器中，請稍後....\n{hint}".format(hint=GAME_SERVER_LOGIN_HINT))
         jenkinsContent.post_job_start()
     elif switch == 'down':
         await ctx.respond("即將停止伺服器....")

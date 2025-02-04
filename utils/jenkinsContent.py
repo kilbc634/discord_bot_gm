@@ -141,10 +141,16 @@ def check_player_inactive(inactive_sec = 60 * 60):
             # 解析status.log的登入登出訊息
             log_entries = []
     
-            # 正則表達式匹配 登入/登出 訊息
             # sample:
+            # palworld-server | [2025-02-03 01:51:43] [LOG] RCON executed the command. ShowPlayers
             # palworld-server | [2025-01-16 13:49:35] [LOG] Tsukumo0114 joined the server. (User id: steam_76561198131832310)
             # palworld-server | [2025-01-16 13:51:36] [LOG] Tsukumo0114 left the server. (User id: steam_76561198131832310)
+
+            # 正則表達式匹配 第一次心跳 訊息
+            pattern_uptime = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[LOG\] RCON executed the command")
+            timestamp_uptime = pattern_uptime.search(status_file).group(1)
+
+            # 正則表達式匹配 登入/登出 訊息
             pattern = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[LOG\] (.+?) (joined|left) the server\. \(User id: (steam_\d+)\)")
 
             for match in pattern.finditer(status_file):
@@ -178,9 +184,13 @@ def check_player_inactive(inactive_sec = 60 * 60):
             else:
                 print("當前無玩家在線")
 
-            # 如果無人在線，檢查最後一筆登出紀錄時間
-            last_log = log_entries[-1]
-            log_time = datetime.strptime(last_log['timestamp'], "%Y-%m-%d %H:%M:%S")
+            # 如果無人在線，檢查最後一筆登出紀錄時間（如果沒有登出紀錄，則使用第一次心跳紀錄）
+            log_time = ''
+            if len(log_entries) >= 1:
+                last_log = log_entries[-1]
+                log_time = datetime.strptime(last_log['timestamp'], "%Y-%m-%d %H:%M:%S")
+            else:
+                log_time = datetime.strptime(timestamp_uptime, "%Y-%m-%d %H:%M:%S")
             now_time = datetime.now()
             time_difference = now_time - log_time
             if time_difference > timedelta(seconds=inactive_sec):
@@ -191,8 +201,7 @@ def check_player_inactive(inactive_sec = 60 * 60):
                 # 最後一筆登出紀錄尚未超時
                 print("最後一筆登出紀錄尚未超時")
                 return False
-                
-
+            
         else:
             # 如果無法獲取 status.log，則認為構建無效
             print("無法獲取status.log")
