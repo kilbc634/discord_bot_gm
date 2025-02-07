@@ -117,7 +117,7 @@ def check_player_inactive(inactive_sec = 60 * 60):
 
         # 輪巡等待job執行完成
         start_time = time.time()
-        timeout_sec = 60
+        timeout_sec = 40
         for times in range(100):
             print("第 {times} 次確認job執行狀態....".format(times=str(times)))
             # 獲取該構建的信息
@@ -148,11 +148,13 @@ def check_player_inactive(inactive_sec = 60 * 60):
 
             # 正則表達式匹配 第一次心跳 訊息
             pattern_uptime = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[LOG\] RCON executed the command")
-            timestamp_uptime = pattern_uptime.search(status_file).group(1)
+            match_uptime = pattern_uptime.search(status_file)
+            if not match_uptime: # 有可能在伺服器開啟到一半時將log撈回，但因為尚未完全啟動所以 第一次心跳 尚未產生
+                return False
+            timestamp_uptime = match_uptime.group(1)
 
             # 正則表達式匹配 登入/登出 訊息
             pattern = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[LOG\] (.+?) (joined|left) the server\. \(User id: (steam_\d+)\)")
-
             for match in pattern.finditer(status_file):
                 timestamp, username, action, steam_id = match.groups()
                 log_entries.append({
