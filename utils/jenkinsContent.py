@@ -32,7 +32,7 @@ Jenkins_session.headers.update({
 def post_job_status():
     response = Jenkins_session.post(f"{Jenkins_job['game_status']}/build")
     if response.status_code == 201:
-        print("已排程，將更新伺服器狀態")
+        print("已排程，將產出最新的伺服器狀態報告")
     else:
         print(f"Failed to trigger build. Status code: {response.status_code}")
 
@@ -51,6 +51,22 @@ def post_job_stop():
         print(f"Failed to trigger build. Status code: {response.status_code}")
 
 
+# 紀錄近期「在線人數」的資料數據（用於 通用格式 判斷，index=0是最近一次）
+# ex:
+# [
+#     {
+#         "player_count": 0,
+#         "players": [],
+#         "timestamp": 1775706247
+#     },
+#     {
+#         "player_count": 2,
+#         "players": ['Tsukumo99', 'QQ軟糖'],
+#         "timestamp": 1775705832
+#     },
+#     .....
+# ]
+Recently_playing_data = []
 # 透過jenkins產生的status.json來檢查，是否長時間(預設60分鐘)都無人在線
 def check_player_inactive(inactive_sec = 60 * 60):
     # 滿意工廠: jenkins定時執行status檢查，每次檢查只能帶出「當前在線人數」
@@ -208,7 +224,64 @@ def check_player_inactive(inactive_sec = 60 * 60):
             # 如果無法獲取 status.log，則認為構建無效
             print("無法獲取status.log")
             return False
+    
+    # 通用格式：定時觸發並產出最新的 status_log.txt 獲取當前「在線人數」
+    # 每次取得「當前時間 - 在線人數」資料後都會將其暫存至全域變數（重開app會遺失），累積多筆數據後，會檢查近期 inactive_sec 內的資料是否都是無人在線
+    else:
+        global Recently_playing_data
 
+        # 執行status檢查job
+        post_job_status()
+        time.sleep(10)
+
+        build_number = get_last_build_number()
+        print(f"最新的建構是 build_number = {build_number}")
+
+        # 輪巡等待job執行完成
+        start_time = time.time()
+        timeout_sec = 40
+        for times in range(100):
+            print("第 {times} 次確認job執行狀態....".format(times=str(times)))
+            # 獲取該構建的信息
+            build_info = get_build_info(build_number)
+            if not build_info.get('building', True):
+                print(f"執行完成，其結果是: {build_info.get('result')}")
+                break
+            if time.time() - start_time > timeout_sec:
+                print("輪巡等待job已超時")
+                # 檢查job失敗，視同server已關閉，將清空近期資料
+                Recently_playing_data = []
+                return False
+            time.sleep(5)
+
+        # 嘗試獲取status.log
+        build_info_stable = get_build_info(build_number)
+        if build_info_stable['result'] != 'SUCCESS':
+            print("檢測到建構沒有成功")
+            # 檢查job失敗，視同server已關閉，將清空近期資料
+            Recently_playing_data = []
+            return False
+        status_file = download_status_file(build_number, 'status_log.txt')
+
+        if not status_file:
+            # 如果無法獲取 status.log，則認為構建無效
+            print("無法獲取status.log")
+            # 檢查job失敗，視同server已關閉，將清空近期資料
+            Recently_playing_data = []
+            return False  
+        
+        # 從檔案裡取得「在線人數」資料，並暫存起來
+        count, players = parse_current_status(status_file)
+        Recently_playing_data.insert(0, {
+            "player_count": count,  # int
+            "players": players,  # str list
+            "timestamp": time.time()
+        })
+        # 檢查是否一段時間都無人在線
+        is_inactive = is_inactive_recently(Recently_playing_data, inactive_sec)
+
+        return is_inactive
+  
 
 # 獲取最新構建的編號
 def get_last_build_number():
@@ -233,3 +306,71 @@ def download_status_file(build_number, file_name):
     if response.status_code == 200:
         return response.text
     return None
+
+# 提取 status 文件裡的 CURRENT STATUS 資訊
+def parse_current_status(text: str):
+    # 找出 CURRENT STATUS 區塊
+    match = re.search(
+        r"--- CURRENT STATUS ---\s*(.*?)\s*(?:\n\s*\n|$)",
+        text,
+        re.DOTALL
+    )
+    
+    if not match:
+        raise ValueError("CURRENT STATUS block not found")
+    
+    block = match.group(1)
+
+    player_count = None
+    players = None
+
+    for line in block.splitlines():
+        line = line.strip()
+
+        if line.startswith("player_count="):
+            value = line.split("=", 1)[1].strip()
+            # 這裡故意不 try/except，讓 int 失敗時直接噴錯
+            player_count = int(value)
+
+        elif line.startswith("players="):
+            value = line.split("=", 1)[1].strip()
+            if value == "":
+                players = []
+            else:
+                players = [p.strip() for p in value.split(",") if p.strip()]
+
+    if player_count is None:
+        raise ValueError("player_count not found")
+
+    if players is None:
+        raise ValueError("players not found")
+
+    return player_count, players
+
+# 檢查近期的 playing data，「近期一定時間內」是否都沒有玩家在線
+def is_inactive_recently(playing_data_list, recently_time_sec):
+    if not playing_data_list:
+        return False
+
+    start_ts = playing_data_list[0]["timestamp"]
+    target_ts = start_ts - recently_time_sec
+
+    reached_time_window = False
+
+    for record in playing_data_list:
+        ts = record["timestamp"]
+
+        # 檢查玩家數
+        if record["player_count"] != 0:
+            return False
+
+        # 是否已經跨過時間門檻（要包含這筆）
+        if ts <= target_ts:
+            reached_time_window = True
+            break
+
+    # ❗如果根本沒走到「近期一定時間內」，代表資料不足
+    if not reached_time_window:
+        return False
+
+    return True

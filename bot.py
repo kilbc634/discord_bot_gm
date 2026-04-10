@@ -33,8 +33,8 @@ async def ping(ctx: discord.ApplicationContext):
 
 # 存儲正在運行的背景任務
 task_mapping = {}
-# 背景任務，預設每 5 分鐘執行一次
-@tasks.loop(seconds= 5 * 60)
+# 背景任務，預設每 10 分鐘執行一次
+@tasks.loop(seconds= 10 * 60)
 async def stop_server_when_player_inactive():
     is_inactive = jenkinsContent.check_player_inactive()
     if is_inactive == True:
